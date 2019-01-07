@@ -83,11 +83,21 @@ class QualysRequester():
 			logging.debug(f'Processing report {r}')
 			if r['LAST_ID'] != r['ID']:
 				logging.debug(f'Found undownloaded report {r}')
-				if r['OUTPUT_FORMAT'] in self.conf['report_formats']:
+				report_full = r['TITLE'] in self.conf['report_full']
+				report_partial = any(sub in r['TITLE'] for sub in self.conf['report_partial'])
+				report_formats = r['OUTPUT_FORMAT'] in self.conf['report_formats']
+				if not report_formats:
+					logging.debug(f"Skipping Report {r} not one of {str(self.conf['report_formats'])}")
+				elif report_full:
+					logging.debug(f'Enquing {r}')
+					self.download_queue.put({'ID':r['ID'], 'TITLE':r['TITLE'], 'OUTPUT_FORMAT':r['OUTPUT_FORMAT']})
+				elif report_partial:
 					logging.debug(f'Enquing {r}')
 					self.download_queue.put({'ID':r['ID'], 'TITLE':r['TITLE'], 'OUTPUT_FORMAT':r['OUTPUT_FORMAT']})
 				else:
-					logging.debug(f'Skipping Report {r} not TYPE HERE')
+					logging.debug(f"Report {r['TITLE']} does not meet criteria, skipping.")
+			else:
+				logging.debug('Some weird LAST_ID ID issue')
 		logging.debug('Enqueing reports finished')
 
 	def download_reports(self):
@@ -142,18 +152,13 @@ class QualysRequester():
 		# Iterate over every report and build or update the cache as needed
 		for r in xdict['REPORT_LIST_OUTPUT']['RESPONSE']['REPORT_LIST']['REPORT']:
 			# r keys 'ID', 'TITLE', 'TYPE', 'USER_LOGIN', 'LAUNCH_DATETIME', 'OUTPUT_FORMAT', 'SIZE', 'STATUS', 'EXPIRATION_DATETIME'
-			# TODO - Configurable filter
-			#if r['TITLE'].startswith('CUT'):
-			if any(r['TITLE'].startswith(prf) for prf in self.conf['prefixes']):
-				if r['TITLE'] not in self.reports:
-					logging.debug(f"Adding new report {r['TITLE']}")
-					self.reports[r['TITLE']] = r
-					self.reports[r['TITLE']]['LAST_ID'] = None
-				else:
-					logging.debug(f"Updating report {r['TITLE']}")
-					logging.error('Updating report unimplemented')
+			if r['TITLE'] not in self.reports:
+				logging.debug(f"Adding new report {r['TITLE']}")
+				self.reports[r['TITLE']] = r
+				self.reports[r['TITLE']]['LAST_ID'] = None
 			else:
-				logging.debug(f"Skipping report {r['TITLE']}")
+				logging.debug(f"Updating report {r['TITLE']}")
+				logging.error('Updating report unimplemented')
 
 	def get_report_list2(self):
 		logging.info('Downloading report list')
